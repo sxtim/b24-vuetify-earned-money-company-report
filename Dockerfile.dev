@@ -1,0 +1,28 @@
+# Use the same base image
+FROM node:18-alpine
+
+# Set the working directory
+WORKDIR /app
+
+# Copy all package.json files to install dependencies
+COPY package*.json ./
+COPY backend/package*.json ./backend/
+COPY frontend/package*.json ./frontend/
+
+# Install all dependencies
+# This step is crucial and will be cached by Docker
+RUN npm install
+RUN npm install --prefix backend
+RUN npm install --prefix frontend
+
+# Copy the rest of the source code.
+# This is useful for cases where you might run the container without volumes,
+# but in our docker-compose setup, volumes will override this.
+COPY . .
+
+# Expose ports for backend and frontend dev servers
+EXPOSE 3000
+EXPOSE 5173
+
+# The command to run both development servers
+CMD ["npm", "run", "dev"] 

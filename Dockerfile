@@ -1,28 +1,43 @@
-# 1. Base image for development
-FROM node:18-alpine as development
-
-# Set the working directory in the container
+# 1. Base image for installing all dependencies
+FROM node:18-alpine AS base
 WORKDIR /app
 
-# Install dependencies for all workspaces
+# Copy all package.json files
 COPY package*.json ./
 COPY backend/package*.json ./backend/
 COPY frontend/package*.json ./frontend/
 
-# Install dependencies
+# Install all dependencies
 RUN npm install
-
-# Install backend dependencies
 RUN npm install --prefix backend
-
-# Install frontend dependencies
 RUN npm install --prefix frontend
 
-# Copy all the source code
+# 2. Builder image
+FROM base AS builder
+WORKDIR /app
+
+# Copy the entire source code
 COPY . .
 
-# Build the application for production
+# Run the build script from the backend package
+# This script builds both frontend and backend and places them in /app/dist
 RUN npm run build --prefix backend
+
+# 3. Final image for production
+FROM node:18-alpine AS final
+WORKDIR /app
+
+# Copy the production build from the builder stage
+COPY --from=builder /app/dist .
+
+# Install production dependencies
+RUN npm install --omit=dev
+
+# Expose the port the server is running on
+EXPOSE 3000
+
+# The command to start the production server
+CMD [ "npm", "start" ]
 
 # Expose ports for backend and frontend dev server
 EXPOSE 3000
