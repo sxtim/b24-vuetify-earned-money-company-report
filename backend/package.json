@@ -1,0 +1,24 @@
+{
+	"name": "backend",
+	"version": "1.0.0",
+	"main": "index.js",
+	"scripts": {
+		"start": "node dist/server.js",
+		"dev": "nodemon src/server.js",
+		"build": "node scripts/build.js",
+		"test": "echo \"Error: no test specified\" && exit 1"
+	},
+	"keywords": [],
+	"author": "",
+	"license": "ISC",
+	"dependencies": {
+		"axios": "^1.9.0",
+		"b24-app-template": "file:..",
+		"express": "^4.19.2"
+	},
+	"description": "",
+	"devDependencies": {
+		"fs-extra": "^11.3.0",
+		"nodemon": "^3.1.0"
+	}
+}

@@ -1,0 +1,23 @@
+# Stage 1: Build the application (using the development image as a base)
+FROM development as builder
+
+# Run the build script
+RUN npm run build --prefix backend
+
+
+# Stage 2: Create the production image
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Copy the build output from the builder stage
+COPY --from=builder /app/dist .
+
+# Install production dependencies
+RUN npm install --production
+
+# Expose the port the app runs on
+EXPOSE 3000
+
+# Set the command to start the server
+CMD [ "npm", "start" ] 

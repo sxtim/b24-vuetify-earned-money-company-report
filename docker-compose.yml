@@ -1,0 +1,18 @@
+version: "3.8"
+
+services:
+  app:
+    build: .
+    command: npm run dev
+    ports:
+      - "3000:3000" # Backend API
+      - "5173:5173" # Frontend Vite server
+    volumes:
+      # Map source code for hot-reloading
+      - ./backend:/app/backend
+      - ./frontend:/app/frontend
+      - ./ssl:/app/ssl
+      # Anonymous volumes to prevent host node_modules from overwriting container's
+      - /app/node_modules
+      - /app/backend/node_modules
+      - /app/frontend/node_modules

@@ -1,0 +1,21 @@
+{
+	"name": "frontend",
+	"version": "1.0.0",
+	"private": true,
+	"scripts": {
+		"dev": "vite",
+		"build": "vite build",
+		"preview": "vite preview"
+	},
+	"dependencies": {
+		"@mdi/font": "^7.4.47",
+		"b24-app-template": "file:..",
+		"vue": "^3.4.21",
+		"vuetify": "^3.5.8"
+	},
+	"devDependencies": {
+		"@vitejs/plugin-vue": "^5.0.4",
+		"vite": "^5.1.5",
+		"vite-plugin-vuetify": "^2.0.3"
+	}
+}
