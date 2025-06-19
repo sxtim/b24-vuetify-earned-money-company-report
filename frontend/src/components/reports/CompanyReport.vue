@@ -507,6 +507,10 @@ const dealRowProps = ({ item }) => {
 	}
 	return {}
 }
+
+defineExpose({
+	companyData,
+})
 </script>
 
 <style scoped>

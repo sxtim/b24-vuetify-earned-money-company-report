@@ -6,7 +6,7 @@
 				mdi-information-outline
 			</v-icon>
 		</v-card-title>
-		<v-card-text>
+		<v-card-text style="padding-bottom: 80px">
 			<!-- Filters -->
 			<v-row align="center">
 				<v-col cols="12" sm="6" md="4">
@@ -85,7 +85,11 @@
 			</v-row>
 
 			<!-- Отчет по компаниям -->
-			<CompanyReport :filters="filters" :loading="loading" />
+			<CompanyReport
+				ref="companyReportRef"
+				:filters="filters"
+				:loading="loading"
+			/>
 		</v-card-text>
 
 		<v-alert v-if="error" type="error" dense>
@@ -171,11 +175,20 @@
 				</v-card-actions>
 			</v-card>
 		</v-dialog>
+		<v-btn
+			@click="exportToExcel"
+			color="success"
+			prepend-icon="mdi-file-excel"
+			style="position: absolute; bottom: 24px; left: 24px"
+		>
+			Выгрузить в Excel
+		</v-btn>
 	</v-card>
 </template>
 
 <script setup>
 import { computed, inject, onMounted, ref } from "vue"
+import * as XLSX from "xlsx"
 import { fetchEntities } from "../utils/bx24Api"
 import CompanyReport from "./reports/CompanyReport.vue"
 
@@ -187,6 +200,30 @@ const formatDate = dateString => {
 		month: "2-digit",
 		year: "numeric",
 	})
+}
+
+const companyReportRef = ref(null)
+
+const exportToExcel = () => {
+	const reportData = companyReportRef.value?.companyData
+	if (!reportData || reportData.length === 0) {
+		console.log("Нет данных для экспорта.")
+		return
+	}
+
+	const dataToExport = reportData.map(item => ({
+		Компания: item.company,
+		"Дата создания": item.dateCreated,
+		"Кол-во заключенных сделок": item.closedDealsCount,
+		"Кол-во незаключенных сделок": item.openDealsCount,
+		"Сумма заключенных сделок": item.closedDealsAmount,
+		"Сумма незаключенных сделок": item.openDealsAmount,
+	}))
+
+	const worksheet = XLSX.utils.json_to_sheet(dataToExport)
+	const workbook = XLSX.utils.book_new()
+	XLSX.utils.book_append_sheet(workbook, worksheet, "Отчет по компаниям")
+	XLSX.writeFile(workbook, "Отчет по заработанным деньгам.xlsx")
 }
 
 // --- State ---
