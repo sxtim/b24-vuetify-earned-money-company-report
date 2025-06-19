@@ -10,6 +10,7 @@
 			item-value="id"
 			:items-per-page-options="itemsPerPageOptions"
 			hide-default-footer
+			hover
 		>
 			<template v-slot:item.company="{ item }">
 				<a
@@ -106,6 +107,8 @@
 						:items="selectedCompanyDeals"
 						class="elevation-1"
 						item-value="id"
+						:row-props="dealRowProps"
+						hover
 					>
 						<template v-slot:item.title="{ item }">
 							<a
@@ -311,6 +314,7 @@ const loadCompaniesData = async () => {
 					"CLOSED",
 					"COMPANY_ID",
 					"ASSIGNED_BY_ID",
+					"STAGE_ID",
 				],
 				filter: dealFilter,
 				useBatch: true,
@@ -347,8 +351,12 @@ const loadCompaniesData = async () => {
 		// Process deals for each company
 		companyIds.forEach(companyId => {
 			const dealsData = dealsDataByCompany[companyId] || []
-			const closedDeals = dealsData.filter(deal => deal.CLOSED === "Y")
-			const openDeals = dealsData.filter(deal => deal.CLOSED !== "Y")
+			const closedDeals = dealsData.filter(
+				deal => deal.CLOSED === "Y" && deal.STAGE_ID?.includes("WON")
+			)
+			const openDeals = dealsData.filter(
+				deal => !(deal.CLOSED === "Y" && deal.STAGE_ID?.includes("WON"))
+			)
 
 			dealsByCompany.value[companyId] = {
 				closedDealsCount: closedDeals.length,
@@ -481,6 +489,7 @@ const showOpenDealsModal = company => {
 			title: deal.TITLE,
 			opportunity: deal.OPPORTUNITY,
 			manager: users.value[deal.ASSIGNED_BY_ID] || "Не назначен",
+			isFailed: deal.CLOSED === "Y",
 		}))
 		dealsModalVisible.value = true
 	}
@@ -490,6 +499,13 @@ const openDealCard = dealId => {
 	if (BX24) {
 		BX24.openPath(`/crm/deal/details/${dealId}/`)
 	}
+}
+
+const dealRowProps = ({ item }) => {
+	if (item.isFailed) {
+		return { class: "failed-deal" }
+	}
+	return {}
 }
 </script>
 
@@ -506,5 +522,18 @@ const openDealCard = dealId => {
 
 .pagination-controls {
 	width: 100%;
+}
+
+::v-deep .v-data-table thead {
+	background-color: #f5f5f5;
+}
+
+::v-deep .failed-deal {
+	color: #f44336; /* Vuetify's red color */
+}
+
+/* Ensure links inside a failed row are also red */
+::v-deep .failed-deal a {
+	color: inherit;
 }
 </style>
