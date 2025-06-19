@@ -12,10 +12,10 @@
 				<v-col cols="12" sm="6" md="4">
 					<v-autocomplete
 						label="Компания"
-						:items="allCompanies"
-						v-model="selectedCompanies"
+						:items="companyFilterItems"
+						v-model="selectedCompanyTitles"
 						item-title="title"
-						item-value="ID"
+						item-value="value"
 						multiple
 						clearable
 						chips
@@ -25,7 +25,9 @@
 							<v-list-item v-bind="props" :title="item.raw.title">
 								<template v-slot:prepend>
 									<v-checkbox-btn
-										:model-value="selectedCompanies.includes(item.raw.ID)"
+										:model-value="
+											selectedCompanyTitles.includes(item.raw.value)
+										"
 									></v-checkbox-btn>
 								</template>
 							</v-list-item>
@@ -45,7 +47,7 @@
 							<v-text-field
 								v-bind="props"
 								:model-value="formattedDateRange"
-								label="Период завершения сделки"
+								label="Период"
 								prepend-icon="mdi-calendar"
 								readonly
 								clearable
@@ -129,7 +131,7 @@
 							для фильтрации отчета.
 						</li>
 						<li>
-							<strong>Период завершения сделки:</strong> Укажите диапазон дат, в
+							<strong>Период:</strong> Укажите диапазон дат, в
 							который сделки были завершены.
 						</li>
 					</ul>
@@ -168,7 +170,7 @@ const error = ref(null)
 const BX24 = inject("BX24")
 
 // Filters
-const selectedCompanies = ref([])
+const selectedCompanyTitles = ref([])
 const dateRange = ref([])
 const tempDateRange = ref([])
 const dateMenu = ref(false)
@@ -201,14 +203,24 @@ const formattedDateRange = computed(() => {
 })
 
 // Data
-const allCompanies = ref([]) // Для фильтра компаний
+const allCompanies = ref([])
+const companyFilterItems = computed(() => {
+	// Create a unique list for the filter based on title
+	const uniqueCompanies = [
+		...new Map(allCompanies.value.map(item => [item.title, item])).values(),
+	]
+	return uniqueCompanies.map(c => ({ title: c.title, value: c.title }))
+})
 
 // Общие фильтры для передачи в дочерние компоненты
 const filters = computed(() => {
 	const filterObj = {}
 
-	if (selectedCompanies.value.length > 0) {
-		filterObj.COMPANY_ID = selectedCompanies.value
+	if (selectedCompanyTitles.value.length > 0) {
+		// Find all company IDs that match the selected titles
+		filterObj.COMPANY_ID = allCompanies.value
+			.filter(c => selectedCompanyTitles.value.includes(c.title))
+			.map(c => c.ID)
 	}
 
 	if (dateRange.value && dateRange.value.length > 0) {
@@ -244,7 +256,6 @@ const fetchInitialData = async () => {
 			dateCreate: company.DATE_CREATE,
 		}))
 	} catch (err) {
-		console.error("Ошибка при загрузке списка компаний:", err)
 		error.value =
 			"Ошибка при запросе списка компаний. Попробуйте позже или обратитесь в службу поддержки."
 		allCompanies.value = []
@@ -260,9 +271,12 @@ onMounted(() => {
 
 <style>
 /* Global styles if needed */
-.v-row {
-	justify-content: space-between;
+.v-col-md-4 {
+	flex: 0 0 50% !important;
+	max-width: 100%;
 }
+
+
 .v-card .v-card-text {
 	padding: 16px; /* Re-add default padding, can be overridden by utility classes */
 }
@@ -270,10 +284,34 @@ onMounted(() => {
 /* Стили для иконки календаря */
 .date-picker-field .v-input__prepend .mdi-calendar {
 	color: var(--v-theme-primary);
-	font-size: 20px;
+	font-size: 28px;
 }
 
 .v-input__prepend {
 	margin-right: 0 !important;
+}
+
+.v-input{
+	width: 100% !important;
+}
+
+
+	@media (min-width: 1920px) {
+    .v-container {
+        max-width: 100%;
+    }
+
+}
+
+@media (min-width: 1280px) {
+    .v-container {
+        max-width: 100%;
+    }
+}
+
+@media (min-width: 960px) {
+    .v-container {
+        max-width: 100%;
+    }
 }
 </style>

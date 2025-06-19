@@ -9,6 +9,21 @@
 			item-value="id"
 			:items-per-page-options="itemsPerPageOptions"
 		>
+			<template v-slot:item.company="{ item }">
+				<a
+					href="#"
+					@click.prevent="openCompanyCard(item.id)"
+					class="company-link"
+				>
+					{{ item.company }}
+				</a>
+			</template>
+			<template v-slot:item.closedDealsAmount="{ item }">
+				{{ formatCurrency(item.closedDealsAmount) }}
+			</template>
+			<template v-slot:item.openDealsAmount="{ item }">
+				{{ formatCurrency(item.openDealsAmount) }}
+			</template>
 			<template v-slot:loading>
 				<v-skeleton-loader type="table-row@5"></v-skeleton-loader>
 			</template>
@@ -38,7 +53,6 @@
 import { computed, inject, onMounted, ref, watch } from "vue"
 import {
 	fetchEntities,
-	fetchRelatedEntities,
 	fetchRelatedEntitiesForMultiple,
 } from "../../utils/bx24Api"
 
@@ -135,33 +149,28 @@ const loadCompaniesData = async () => {
 	isLoading.value = true
 
 	try {
-		// Получаем список компаний
+		// Get the list of companies
 		const companyFilter = {}
 		if (props.filters.COMPANY_ID && props.filters.COMPANY_ID.length > 0) {
 			companyFilter.ID = props.filters.COMPANY_ID
 		}
 
-		// Получаем компании с использованием пакетных запросов
-		const companiesData = await fetchEntities(BX24, "crm.company", {
+		const companies = await fetchEntities(BX24, "crm.company", {
 			select: ["ID", "TITLE", "DATE_CREATE"],
 			filter: companyFilter,
 			order: { TITLE: "ASC" },
 			useBatch: true,
 		})
 
-		// Сбрасываем данные о сделках компаний
 		dealsByCompany.value = {}
 
-		if (companiesData.length === 0) {
+		if (companies.length === 0) {
 			companyData.value = []
 			isLoading.value = false
 			return
 		}
 
-		// Строим фильтр для сделок
 		const dealFilter = {}
-
-		// Добавляем фильтры дат, если они есть
 		if (props.filters[">=CLOSEDATE"]) {
 			dealFilter[">=CLOSEDATE"] = props.filters[">=CLOSEDATE"]
 		}
@@ -169,143 +178,93 @@ const loadCompaniesData = async () => {
 			dealFilter["<=CLOSEDATE"] = props.filters["<=CLOSEDATE"]
 		}
 
-		// Получаем ID всех компаний
-		const companyIds = companiesData.map(company => company.ID)
+		const companyIds = companies.map(company => company.ID)
 
-		try {
-			// Получаем сделки для всех компаний одним запросом
-			const dealsDataByCompany = await fetchRelatedEntitiesForMultiple(
-				BX24,
-				"crm.deal",
-				"COMPANY_ID",
-				companyIds,
-				{
-					select: [
-						"ID",
-						"TITLE",
-						"OPPORTUNITY",
-						"STAGE_ID",
-						"CLOSED",
-						"CLOSEDATE",
-						"COMPANY_ID",
-					],
-					filter: dealFilter,
-					useBatch: true,
-				}
-			)
+		// Fetch deals for all companies
+		const dealsDataByCompany = await fetchRelatedEntitiesForMultiple(
+			BX24,
+			"crm.deal",
+			"COMPANY_ID",
+			companyIds,
+			{
+				select: ["ID", "OPPORTUNITY", "CLOSED", "COMPANY_ID"],
+				filter: dealFilter,
+				useBatch: true,
+			}
+		)
 
-			// Обрабатываем полученные сделки для каждой компании
-			companyIds.forEach(companyId => {
-				const dealsData = dealsDataByCompany[companyId] || []
+		// Process deals for each company
+		companyIds.forEach(companyId => {
+			const dealsData = dealsDataByCompany[companyId] || []
+			const closedDeals = dealsData.filter(deal => deal.CLOSED === "Y")
+			const openDeals = dealsData.filter(deal => deal.CLOSED !== "Y")
 
-				// Группируем сделки по статусу (закрытые/незакрытые)
-				const closedDeals = dealsData.filter(deal => deal.CLOSED === "Y")
-				const openDeals = dealsData.filter(deal => deal.CLOSED !== "Y")
-
-				// Считаем суммы
-				const closedDealsAmount = closedDeals.reduce(
+			dealsByCompany.value[companyId] = {
+				closedDealsCount: closedDeals.length,
+				closedDealsAmount: closedDeals.reduce(
 					(sum, deal) => sum + parseFloat(deal.OPPORTUNITY || 0),
 					0
-				)
-
-				const openDealsAmount = openDeals.reduce(
+				),
+				openDealsAmount: openDeals.reduce(
 					(sum, deal) => sum + parseFloat(deal.OPPORTUNITY || 0),
 					0
-				)
+				),
+			}
+		})
 
-				// Сохраняем данные для компании
-				dealsByCompany.value[companyId] = {
-					closedDeals,
-					openDeals,
-					closedDealsCount: closedDeals.length,
-					closedDealsAmount,
-					openDealsAmount,
-				}
-			})
-		} catch (dealsError) {
-			console.error("Ошибка при загрузке сделок для компаний:", dealsError)
+		// Group companies by title to aggregate data
+		const companiesGroupedByTitle = companies.reduce((acc, company) => {
+			if (!acc[company.TITLE]) {
+				acc[company.TITLE] = []
+			}
+			acc[company.TITLE].push(company)
+			return acc
+		}, {})
 
-			// Если не удалось загрузить сделки пакетным запросом, пробуем загрузить по одной компании
-			console.warn(
-				"Переключаемся на последовательную загрузку сделок для компаний"
-			)
+		// Create aggregated data for the table
+		const aggregatedData = Object.entries(companiesGroupedByTitle).map(
+			([title, companiesInGroup]) => {
+				const representativeId = companiesInGroup[0].ID
+				let earliestDate = new Date(companiesInGroup[0].DATE_CREATE)
 
-			for (const company of companiesData) {
-				const companyId = company.ID
+				const totals = companiesInGroup.reduce(
+					(acc, company) => {
+						const dealInfo = dealsByCompany.value[company.ID]
+						const createDate = new Date(company.DATE_CREATE)
 
-				try {
-					// Получаем сделки для компании обычным запросом
-					const dealsData = await fetchRelatedEntities(
-						BX24,
-						"crm.deal",
-						"COMPANY_ID",
-						companyId,
-						{
-							select: [
-								"ID",
-								"TITLE",
-								"OPPORTUNITY",
-								"STAGE_ID",
-								"CLOSED",
-								"CLOSEDATE",
-							],
-							filter: dealFilter,
-							useBatch: false,
+						if (createDate < earliestDate) {
+							earliestDate = createDate
 						}
-					)
 
-					// Группируем сделки по статусу (закрытые/незакрытые)
-					const closedDeals = dealsData.filter(deal => deal.CLOSED === "Y")
-					const openDeals = dealsData.filter(deal => deal.CLOSED !== "Y")
-
-					// Считаем суммы
-					const closedDealsAmount = closedDeals.reduce(
-						(sum, deal) => sum + parseFloat(deal.OPPORTUNITY || 0),
-						0
-					)
-
-					const openDealsAmount = openDeals.reduce(
-						(sum, deal) => sum + parseFloat(deal.OPPORTUNITY || 0),
-						0
-					)
-
-					// Сохраняем данные для компании
-					dealsByCompany.value[companyId] = {
-						closedDeals,
-						openDeals,
-						closedDealsCount: closedDeals.length,
-						closedDealsAmount,
-						openDealsAmount,
-					}
-				} catch (dealError) {
-					console.error(
-						`Ошибка при загрузке сделок для компании ${companyId}:`,
-						dealError
-					)
-					// Обработка ошибки для одной компании не должна прерывать общую загрузку
-					dealsByCompany.value[companyId] = {
-						closedDeals: [],
-						openDeals: [],
+						if (dealInfo) {
+							acc.closedDealsCount += dealInfo.closedDealsCount
+							acc.closedDealsAmount += dealInfo.closedDealsAmount
+							acc.openDealsAmount += dealInfo.openDealsAmount
+						}
+						return acc
+					},
+					{
 						closedDealsCount: 0,
 						closedDealsAmount: 0,
 						openDealsAmount: 0,
 					}
+				)
+
+				return {
+					id: representativeId,
+					company: title,
+					dateCreated: formatDate(earliestDate.toISOString()),
+					...totals,
 				}
 			}
-		}
+		)
 
-		// Формируем данные для таблицы
-		companyData.value = companiesData.map(company => ({
-			id: company.ID,
-			company: company.TITLE,
-			dateCreated: formatDate(company.DATE_CREATE),
-			closedDealsCount: dealsByCompany.value[company.ID]?.closedDealsCount || 0,
-			closedDealsAmount:
-				dealsByCompany.value[company.ID]?.closedDealsAmount || 0,
-			openDealsAmount: dealsByCompany.value[company.ID]?.openDealsAmount || 0,
-		}))
+		companyData.value = aggregatedData.sort((a, b) =>
+			a.company.localeCompare(b.company)
+		)
 	} catch (e) {
-		console.error("Failed to load company data:", e)
+		// Log error for developers, but don't show to user unless necessary
+		console.error("Failed to load company report data:", e)
 		companyData.value = []
 	} finally {
 		isLoading.value = false
@@ -325,9 +284,25 @@ watch(
 onMounted(() => {
 	loadCompaniesData()
 })
+
+// --- Methods ---
+const openCompanyCard = companyId => {
+	if (BX24) {
+		BX24.openPath(`/crm/company/details/${companyId}/`)
+	}
+}
 </script>
 
-<style>
+<style scoped>
+.company-link {
+	color: #1e88e5; /* Vuetify's primary blue color */
+	text-decoration: none;
+	font-weight: 500;
+}
+.company-link:hover {
+	text-decoration: underline;
+}
+
 /* Стили для таблицы */
 .v-data-table {
 	border-radius: 4px;
